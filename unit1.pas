@@ -2,11 +2,17 @@ unit Unit1;
 
 {$mode objfpc}{$H+}
 
+{$DEFINE ALLOW_DARK}
+
 interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Buttons,
-  Windows, Process, LCLIntf;
+  Windows, Process, LCLIntf, ComboEx, LazUTF8
+   {$IFDEF ALLOW_DARK}
+  ,uDarkStyleParams, uWin32WidgetSetDark, uDarkStyleSchemes, uMetaDarkStyle
+  {$ENDIF}
+  ;
 
 type
 
@@ -14,18 +20,21 @@ type
 
   TForm1 = class(TForm)
     BitBtn1: TBitBtn;
-    ComboBox1: TComboBox;
+    ComboBoxEx1: TComboBoxEx;
+    ImageList1: TImageList;
     Label1: TLabel;
-    Label2: TLabel;
     procedure BitBtn1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure Label2Click(Sender: TObject);
+    procedure WMSysCommand(var Msg: TWMSysCommand); message WM_SYSCOMMAND;
   private
 
   public
     procedure UpdateDrivesToComboBox;
     function GetVolumeName(const DriveLetter: Char): AnsiString;
   end;
+
+const
+  SC_MyMenuItem = WM_USER + 1;
 
 var
   Form1: TForm1;
@@ -34,14 +43,35 @@ implementation
 
 {$R *.lfm}
 
+{$IFDEF ALLOW_DARK}
+procedure SetDarkStyle;
+begin
+ try
+  if not IsDarkModeEnabled then
+   begin
+   uDarkStyleParams.PreferredAppMode:=pamAllowDark;
+   uMetaDarkStyle.ApplyMetaDarkStyle(DefaultDark);
+   end;
+  except
+  end;
+end;
+{$ENDIF}
+
+procedure TForm1.WMSysCommand(var Msg: TWMSysCommand);
+begin
+  if Msg.CmdType = SC_MyMenuItem then OpenURL('http://www.jonyrh.ru')
+  else
+    inherited;
+end;
+
 procedure TForm1.BitBtn1Click(Sender: TObject);
 var
   aStrOut,
-  aDrive  : AnsiString;
+  aDrive: String;
 begin
-  if ComboBox1.ItemIndex=-1 then Exit;
+  if ComboBoxEx1.ItemIndex=-1 then Exit;
 
-  aDrive:=ComboBox1.Text[1] + ComboBox1.Text[2];
+  aDrive:= ComboBoxEx1.ItemsEx.Items[ComboBoxEx1.ItemIndex].Caption[1] + ':';
   aStrOut:='';
 
   if RunCommand('cmd', ['/c', 'manage-bde', '-lock', aDrive, '-ForceDismount'], aStrOut, [], swoHIDE) then
@@ -51,12 +81,11 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  UpdateDrivesToComboBox;
-end;
+  AppendMenu(GetSystemMenu(Handle, FALSE), MF_SEPARATOR, 0, '');
+  AppendMenu(GetSystemMenu(Handle, FALSE), MF_STRING, SC_MyMenuItem, '(c) Jony Rh, 2024');
+  AppendMenu(GetSystemMenu(Handle, FALSE), MF_STRING, SC_MyMenuItem, 'http://www.jonyrh.ru');
 
-procedure TForm1.Label2Click(Sender: TObject);
-begin
-  OpenURL('http://www.jonyrh.ru');
+  UpdateDrivesToComboBox;
 end;
 
 function TForm1.GetVolumeName(const DriveLetter: Char): AnsiString;
@@ -89,7 +118,7 @@ var
   OldMode: Word;
 begin
   OldMode := SetErrorMode(SEM_FAILCRITICALERRORS);
-  ComboBox1.Items.Clear;
+  ComboBoxEx1.Items.Clear;
 
   try
 
@@ -98,11 +127,16 @@ begin
     DriveLetter := Drive + ':';
 
     case GetDriveType(PChar(DriveLetter)) of
-     DRIVE_REMOVABLE, DRIVE_FIXED:
+     DRIVE_REMOVABLE:
        begin
-       DriveLabel:=GetVolumeName(Drive);
+        DriveLabel:=GetVolumeName(Drive);
+        ComboBoxEx1.ItemsEx.AddItem(DriveLetter + ' ' + DriveLabel, 0);
+       end;
 
-       ComboBox1.Items.Add(DriveLetter + ' ' + DriveLabel);
+     DRIVE_FIXED:
+       begin
+        DriveLabel:=GetVolumeName(Drive);
+        ComboBoxEx1.ItemsEx.AddItem(DriveLetter + ' ' + DriveLabel, 1);
        end;
      end;
     end;
@@ -111,10 +145,15 @@ begin
     SetErrorMode(OldMode);
   end;
 
-  if ComboBox1.Items.Count<>0 then ComboBox1.ItemIndex:=ComboBox1.Items.Count-1
-                              else ComboBox1.ItemIndex:=-1;
+  if ComboBoxEx1.Items.Count<>0 then ComboBoxEx1.ItemIndex:= ComboBoxEx1.Items.Count-1
+                                else ComboBoxEx1.ItemIndex:=-1;
 end;
 
+{$IFDEF ALLOW_DARK}
+initialization
+
+SetDarkStyle;
+{$ENDIF}
 
 end.
 
